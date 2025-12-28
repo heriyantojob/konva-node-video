@@ -1,3 +1,4 @@
+const path = require("path");
 const Konva = require("./konvaNode");
 
 const { videoWidth, videoHeight, videoFps } = require("./consts");
@@ -7,18 +8,14 @@ const {
   loadImageAsset,
   makeAnimation,
   combineAnimations,
+  ensureDir,
+  clearOverlayFrames,
+  getVideoDurationSeconds,
 } = require("./video.utils");
 
 function renderBackground(layer) {
-  layer.add(
-    new Konva.Rect({
-      x: 0,
-      y: 0,
-      width: videoWidth,
-      height: videoWidth,
-      fill: "#FCFCFC",
-    })
-  );
+  // Background is provided by the source video; keep function for API symmetry.
+  return null;
 }
 
 function renderText(layer) {
@@ -90,12 +87,23 @@ async function renderLogo(layer) {
 }
 
 async function renderVideo({ outputDir, output }) {
+  const backgroundVideo = path.join(__dirname, "../assets/video.mp4");
+
   const stage = new Konva.Stage({
     width: videoWidth,
     height: videoHeight,
   });
   const start = Date.now();
-  const frames = 5 * videoFps;
+  await ensureDir(outputDir);
+  await clearOverlayFrames(outputDir);
+
+  let frames = 5 * videoFps;
+  try {
+    const durationSec = await getVideoDurationSeconds(backgroundVideo);
+    frames = Math.max(1, Math.ceil(durationSec * videoFps));
+  } catch (err) {
+    console.warn("Falling back to default frame count:", err.message);
+  }
   try {
     const layer = new Konva.Layer();
     stage.add(layer);
@@ -123,7 +131,12 @@ async function renderVideo({ outputDir, output }) {
   }
 
   console.log("creating video");
-  await createVideo({ fps: videoFps, outputDir, output });
+  await createVideo({
+    fps: videoFps,
+    overlayDir: outputDir,
+    backgroundVideo,
+    output,
+  });
   const time = Date.now() - start;
   console.log(`done in ${time} ms. ${(frames * 1000) / (time || 0.01)} FPS`);
 }
